@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ArchViz 3D — Architectural Visualization Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root {
+    --bg: #0D0E11;
+    --surface: #16181D;
+    --surface2: #1E2028;
+    --border: #2A2D35;
+    --gold: #C9A84C;
+    --gold-light: #E8C97A;
+    --gold-dim: #8B6914;
+    --text: #F0EDE8;
+    --text-muted: #8A8F9E;
+    --text-dim: #555A6A;
+    --font-display: 'Playfair Display', serif;
+    --font-body: 'DM Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-body); height: 100vh; overflow: hidden; }
+
+  .app { display: flex; height: 100vh; }
+  .sidebar { width: 260px; min-width: 260px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .right-panel { width: 220px; min-width: 220px; background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; }
+
+  .logo { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
+  .logo h1 { font-family: var(--font-display); font-size: 20px; color: var(--gold); }
+  .logo p { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  .section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .section-title { font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
+
+  .room-btn { width: 100%; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 9px 10px; display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-muted); font-family: var(--font-body); font-size: 13px; transition: all 0.2s; margin-bottom: 3px; text-align: left; }
+  .room-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
+  .room-btn.active { background: #1A1608; border-color: var(--gold-dim); color: var(--gold); }
+  .room-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+
+  .color-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .swatch { width: 32px; height: 32px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; position: relative; }
+  .swatch:hover { transform: scale(1.1); }
+  .swatch.active { border-color: var(--gold); transform: scale(1.08); box-shadow: 0 0 0 1px var(--gold-dim); }
+
+  .floor-btn { width: 100%; background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text-muted); font-family: var(--font-body); font-size: 12px; transition: all 0.2s; margin-bottom: 5px; }
+  .floor-btn:hover { background: var(--surface2); color: var(--text); }
+  .floor-btn.active { border-color: var(--gold-dim); color: var(--gold); background: #1A1608; }
+  .floor-preview { width: 28px; height: 20px; border-radius: 4px; flex-shrink: 0; }
+
+  .toolbar { height: 50px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 6px; }
+  .view-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-family: var(--font-body); font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .view-btn:hover { background: var(--surface2); color: var(--text); }
+  .view-btn.active { background: #1A1608; border-color: var(--gold-dim); color: var(--gold); }
+  .toolbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+  .icon-btn { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .icon-btn:hover { background: var(--surface2); color: var(--text); }
+  .toolbar-title { flex: 1; text-align: center; font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; }
+
+  #canvas-wrap { flex: 1; position: relative; overflow: hidden; cursor: grab; }
+  #canvas-wrap:active { cursor: grabbing; }
+  #threeCanvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+  #canvas2d { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+
+  .canvas-overlay { position: absolute; bottom: 14px; left: 14px; display: flex; gap: 8px; pointer-events: none; }
+  .ov-badge { background: rgba(13,14,17,0.85); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--text-muted); }
+  .ov-badge span { color: var(--gold); font-weight: 500; }
+
+  .drag-hint { position: absolute; top: 14px; right: 14px; background: rgba(13,14,17,0.7); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 10px; color: var(--text-dim); pointer-events: none; }
+
+  .panel-header { padding: 16px; border-bottom: 1px solid var(--border); }
+  .panel-header h3 { font-family: var(--font-display); font-size: 15px; color: var(--gold); }
+  .panel-header p { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px; border-bottom: 1px solid var(--border); }
+  .stat-box { background: var(--surface2); border-radius: 8px; padding: 10px; border: 1px solid var(--border); }
+  .stat-box .num { font-size: 22px; font-weight: 600; color: var(--text); }
+  .stat-box .lbl { font-size: 10px; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.8px; }
+
+  .props { padding: 14px; border-bottom: 1px solid var(--border); }
+  .prop-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .prop-row:last-child { border: none; }
+  .prop-key { font-size: 12px; color: var(--text-muted); }
+  .prop-val { font-size: 12px; font-weight: 500; color: var(--text); }
+
+  .totals { padding: 14px; }
+  .total-row { display: flex; justify-content: space-between; padding: 5px 0; }
+  .total-key { font-size: 12px; color: var(--text-muted); }
+  .total-val { font-size: 12px; font-weight: 600; color: var(--gold); }
+
+  .status-badge { margin: 0 14px 14px; background: #0D1F12; border: 1px solid #2A5C38; border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #4ECBA0; text-align: center; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="logo">
+      <h1>ArchViz 3D</h1>
+      <p>Architectural Visualization Platform</p>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Rooms</div>
+      <button class="room-btn active" onclick="selectRoom(this,'Living Room','42','3.2',3,2)">
+        <div class="room-icon" style="background:#1A1608;color:#C9A84C">L</div>Living Room
+      </button>
+      <button class="room-btn" onclick="selectRoom(this,'Master Bedroom','28','3.0',2,1)">
+        <div class="room-icon" style="background:#120D1A;color:#9B7FD4">B</div>Master Bedroom
+      </button>
+      <button class="room-btn" onclick="selectRoom(this,'Kitchen','18','2.8',2,2)">
+        <div class="room-icon" style="background:#0D1A14;color:#4ECBA0">K</div>Kitchen
+      </button>
+      <button class="room-btn" onclick="selectRoom(this,'Bathroom','12','2.7',1,1)">
+        <div class="room-icon" style="background:#1A120D;color:#E8A870">Ba</div>Bathroom
+      </button>
+      <button class="room-btn" onclick="selectRoom(this,'Study Room','16','3.0',1,1)">
+        <div class="room-icon" style="background:#1A0D0D;color:#FF8080">S</div>Study Room
+      </button>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Wall Color</div>
+      <div class="color-grid">
+        <div class="swatch active" style="background:#F5F0E8" data-name="Ivory Cream" onclick="setColor(this,'#F5F0E8')"></div>
+        <div class="swatch" style="background:#C8D8E8" data-name="Sky Blue" onclick="setColor(this,'#C8D8E8')"></div>
+        <div class="swatch" style="background:#C8E8D8" data-name="Sage Green" onclick="setColor(this,'#C8E8D8')"></div>
+        <div class="swatch" style="background:#E8D0C8" data-name="Blush Rose" onclick="setColor(this,'#E8D0C8')"></div>
+        <div class="swatch" style="background:#D8C8E8" data-name="Lavender" onclick="setColor(this,'#D8C8E8')"></div>
+        <div class="swatch" style="background:#E8E8C8" data-name="Butter" onclick="setColor(this,'#E8E8C8')"></div>
+        <div class="swatch" style="background:#FFFFFF" data-name="Pure White" onclick="setColor(this,'#FFFFFF')"></div>
+        <div class="swatch" style="background:#D4C5A9" data-name="Sandy Beige" onclick="setColor(this,'#D4C5A9')"></div>
+        <div class="swatch" style="background:#A8B8C8" data-name="Steel Blue" onclick="setColor(this,'#A8B8C8')"></div>
+        <div class="swatch" style="background:#B0C8B0" data-name="Mint" onclick="setColor(this,'#B0C8B0')"></div>
+        <div class="swatch" style="background:#C8B0B0" data-name="Dusty Rose" onclick="setColor(this,'#C8B0B0')"></div>
+        <div class="swatch" style="background:#3A3A3A" data-name="Charcoal" onclick="setColor(this,'#3A3A3A')"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Floor Material</div>
+      <button class="floor-btn active" id="fb-wood" onclick="setFloor(this,'wood','Hardwood')">
+        <div class="floor-preview" style="background:repeating-linear-gradient(90deg,#8B6040 0,#A0714F 8px,#7A5538 8px,#8B6040 16px)"></div>
+        Hardwood
+      </button>
+      <button class="floor-btn" id="fb-marble" onclick="setFloor(this,'marble','Marble Tile')">
+        <div class="floor-preview" style="background:linear-gradient(135deg,#E8E0D8 25%,#D8D0C8 50%,#E0D8D0 75%)"></div>
+        Marble Tile
+      </button>
+      <button class="floor-btn" id="fb-concrete" onclick="setFloor(this,'concrete','Concrete')">
+        <div class="floor-preview" style="background:#9A9890"></div>
+        Concrete
+      </button>
+      <button class="floor-btn" id="fb-parquet" onclick="setFloor(this,'parquet','Parquet')">
+        <div class="floor-preview" style="background:repeating-conic-gradient(#9B7040 0 90deg,#7A5530 90deg 180deg) 0 0/12px 12px"></div>
+        Parquet
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="toolbar">
+      <button class="view-btn active" id="vb-3d" onclick="setView('3d',this)">3D View</button>
+      <button class="view-btn" id="vb-floor" onclick="setView('floor',this)">Floor Plan</button>
+      <button class="view-btn" id="vb-front" onclick="setView('front',this)">Front View</button>
+      <button class="view-btn" id="vb-side" onclick="setView('side',this)">Side View</button>
+      <div class="toolbar-sep"></div>
+      <button class="icon-btn" onclick="rotLeft()" title="Rotate Left">↺</button>
+      <button class="icon-btn" onclick="rotRight()" title="Rotate Right">↻</button>
+      <button class="icon-btn" onclick="zoomIn()" title="Zoom In">+</button>
+      <button class="icon-btn" onclick="zoomOut()" title="Zoom Out">−</button>
+      <div class="toolbar-title" id="toolbar-label">3D Perspective View — Drag to rotate</div>
+    </div>
+    <div id="canvas-wrap">
+      <canvas id="threeCanvas"></canvas>
+      <canvas id="canvas2d"></canvas>
+      <div class="canvas-overlay">
+        <div class="ov-badge">Room: <span id="ov-room">Living Room</span></div>
+        <div class="ov-badge">Floor: <span id="ov-floor">Hardwood</span></div>
+        <div class="ov-badge">View: <span id="ov-view">3D</span></div>
+      </div>
+      <div class="drag-hint" id="drag-hint">🖱 Drag to rotate • Scroll to zoom</div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="panel-header">
+      <h3 id="rp-name">Living Room</h3>
+      <p>Selected Room</p>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="num" id="rp-area">42</div><div class="lbl">Area m²</div></div>
+      <div class="stat-box"><div class="num" id="rp-height">3.2</div><div class="lbl">Height m</div></div>
+      <div class="stat-box"><div class="num" id="rp-windows">3</div><div class="lbl">Windows</div></div>
+      <div class="stat-box"><div class="num" id="rp-doors">2</div><div class="lbl">Doors</div></div>
+    </div>
+    <div class="props">
+      <div class="section-title" style="margin-bottom:10px">Properties</div>
+      <div class="prop-row"><span class="prop-key">Wall Color</span><span class="prop-val" id="rp-color">Ivory Cream</span></div>
+      <div class="prop-row"><span class="prop-key">Flooring</span><span class="prop-val" id="rp-floor">Hardwood</span></div>
+      <div class="prop-row"><span class="prop-key">Lighting</span><span class="prop-val">Natural</span></div>
+      <div class="prop-row"><span class="prop-key">Ventilation</span><span class="prop-val">Cross Flow</span></div>
+    </div>
+    <div class="totals">
+      <div class="section-title" style="margin-bottom:10px">Total House</div>
+      <div class="total-row"><span class="total-key">Total Area</span><span class="total-val">116 m²</span></div>
+      <div class="total-row"><span class="total-key">Total Rooms</span><span class="total-val">5</span></div>
+      <div class="total-row"><span class="total-key">Floors</span><span class="total-val">G + 0</span></div>
+      <div class="total-row"><span class="total-key">Plot Size</span><span class="total-val">150 m²</span></div>
+    </div>
+    <div class="status-badge">✓ Ready to Build</div>
+  </div>
+</div>
+
+<script>
+const S = { view:'3d', wallColor:'#F5F0E8', wallName:'Ivory Cream', floor:'wood', floorName:'Hardwood', rotY:0.5, rotX:0.4, zoom:6, dragging:false, lastX:0, lastY:0 };
+
+// THREE.JS
+const wrap = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('threeCanvas'), antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x0D0E11, 1);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0D0E11, 18, 35);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const sun = new THREE.DirectionalLight(0xFFF5E0, 1.2);
+sun.position.set(6, 10, 6); sun.castShadow = true;
+sun.shadow.mapSize.width = sun.shadow.mapSize.height = 1024;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xC8D8FF, 0.25);
+fill.position.set(-5, 4, -4); scene.add(fill);
+
+const houseGroup = new THREE.Group();
+scene.add(houseGroup);
+
+function hexToColor(hex) { return new THREE.Color(parseInt(hex.replace('#',''), 16)); }
+
+function buildHouse() {
+  while (houseGroup.children.length) houseGroup.remove(houseGroup.children[0]);
+
+  const wc = hexToColor(S.wallColor);
+  const wallMat = new THREE.MeshLambertMaterial({ color: wc });
+  const wallSideMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(wc.r*0.82, wc.g*0.82, wc.b*0.82) });
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0x4A3828 });
+  const glassMat = new THREE.MeshLambertMaterial({ color: 0x4488AA, transparent: true, opacity: 0.45 });
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0x5C3D1E });
+  const frameMat = new THREE.MeshLambertMaterial({ color: 0xD4B870 });
+  const stoneMat = new THREE.MeshLambertMaterial({ color: 0x888070 });
+  const grassMat = new THREE.MeshLambertMaterial({ color: 0x1A2210 });
+  const treeTrunk = new THREE.MeshLambertMaterial({ color: 0x5C3A1E });
+  const treeLeaf = new THREE.MeshLambertMaterial({ color: 0x2D5A1E });
+  const treeLeaf2 = new THREE.MeshLambertMaterial({ color: 0x3A7028 });
+  const pathMat = new THREE.MeshLambertMaterial({ color: 0x888070 });
+  const chimMat = new THREE.MeshLambertMaterial({ color: 0x5A3020 });
+
+  const floorColors = { wood: 0x8B6040, marble: 0xDDD5CC, concrete: 0x9A9890, parquet: 0x9B7040 };
+  const floorMat = new THREE.MeshLambertMaterial({ color: floorColors[S.floor] });
+
+  function box(w, h, d, mat, x, y, z, shadow=true) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    if (shadow) { m.castShadow = true; m.receiveShadow = true; }
+    houseGroup.add(m); return m;
+  }
+
+  // Ground
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(30,30), grassMat);
+  g.rotation.x = -Math.PI/2; g.position.y = -0.1; g.receiveShadow = true;
+  houseGroup.add(g);
+
+  // Floor
+  box(6, 0.1, 5, floorMat, 0, -0.05, 0);
+
+  // Outer walls
+  box(6, 3, 0.15, wallMat, 0, 1.5, -2.5);
+  box(6, 3, 0.15, wallMat, 0, 1.5, 2.5);
+  box(0.15, 3, 5, wallSideMat, -3, 1.5, 0);
+  box(0.15, 3, 5, wallSideMat, 3, 1.5, 0);
+
+  // Interior partition walls
+  box(0.1, 3, 2.2, wallMat, 0.6, 1.5, 1.15);
+  box(2.4, 3, 0.1, wallMat, -1.2, 1.5, 0.1);
+
+  // Windows - front
+  box(0.9, 0.9, 0.06, glassMat, -1.6, 1.85, 2.49);
+  box(0.9, 0.9, 0.06, glassMat, 1.6, 1.85, 2.49);
+  // Window frames
+  [[-1.6,1.85,2.52],[1.6,1.85,2.52]].forEach(([x,y,z]) => {
+    box(0.06, 0.96, 0.09, frameMat, x, y, z);
+    box(0.96, 0.06, 0.09, frameMat, x, y, z);
+  });
+
+  // Back window
+  box(1.1, 0.9, 0.06, glassMat, 0, 1.9, -2.49);
+  box(0.06, 0.96, 0.09, frameMat, 0, 1.9, -2.49);
+  box(1.16, 0.06, 0.09, frameMat, 0, 1.9, -2.49);
+
+  // Side windows
+  box(0.9, 0.9, 0.06, glassMat, -2.99, 1.8, -0.8);
+  box(0.96, 0.06, 0.09, frameMat, -2.99, 1.8, -0.8);
+  box(0.06, 0.96, 0.09, frameMat, -2.99, 1.8, -0.8);
+
+  // Door
+  box(0.85, 2.05, 0.1, doorMat, 0.85, 1.025, 2.49);
+  box(0.91, 2.1, 0.06, frameMat, 0.85, 1.025, 2.53);
+  const handle = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), new THREE.MeshLambertMaterial({color:0xC9A84C}));
+  handle.position.set(0.47, 1.0, 2.57); houseGroup.add(handle);
+
+  // Roof
+  const rg = new THREE.ConeGeometry(4.6, 1.9, 4);
+  const roof = new THREE.Mesh(rg, roofMat);
+  roof.rotation.y = Math.PI/4; roof.position.set(0, 3.95, 0);
+  roof.castShadow = true; houseGroup.add(roof);
+
+  // Chimney
+  box(0.4, 1.1, 0.4, chimMat, 1.6, 4.5, -1.0);
+  box(0.5, 0.08, 0.5, chimMat, 1.6, 5.09, -1.0);
+
+  // Steps
+  box(1.3, 0.1, 0.55, stoneMat, 0.85, -0.05, 2.88);
+  box(1.1, 0.1, 0.45, stoneMat, 0.85, 0.05, 3.17);
+
+  // Trees
+  function tree(x, z) {
+    box(0.14, 1.3, 0.14, treeTrunk, x, 0.55, z);
+    const l1 = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 7), treeLeaf);
+    l1.position.set(x, 1.55, z); l1.castShadow = true; houseGroup.add(l1);
+    const l2 = new THREE.Mesh(new THREE.ConeGeometry(0.44, 0.95, 7), treeLeaf2);
+    l2.position.set(x, 2.05, z); houseGroup.add(l2);
+  }
+  tree(-4.2, -3.2); tree(-4.0, 0.8); tree(4.5, -2.5); tree(4.3, 1.8);
+
+  // Garden path
+  const path = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 3.5), pathMat);
+  path.rotation.x = -Math.PI/2; path.position.set(0.85, -0.09, 4.4); houseGroup.add(path);
+
+  // Small bushes
+  function bush(x, z, s=0.35) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(s, 7, 5), new THREE.MeshLambertMaterial({color:0x2A4A18}));
+    b.position.set(x, s*0.6, z); b.castShadow = true; houseGroup.add(b);
+  }
+  bush(-2.8, 2.7); bush(-2.2, 2.7, 0.28); bush(2.2, 2.7); bush(2.8, 2.7, 0.3);
+}
+
+function updateCamera() {
+  const r = S.zoom;
+  camera.position.x = r * Math.sin(S.rotY) * Math.cos(S.rotX);
+  camera.position.y = r * Math.sin(S.rotX) + 1.0;
+  camera.position.z = r * Math.cos(S.rotY) * Math.cos(S.rotX);
+  camera.lookAt(0, 1.2, 0);
+}
+
+// Mouse drag
+const tc = document.getElementById('threeCanvas');
+tc.addEventListener('mousedown', e => { S.dragging = true; S.lastX = e.clientX; S.lastY = e.clientY; });
+window.addEventListener('mousemove', e => {
+  if (!S.dragging) return;
+  S.rotY += (e.clientX - S.lastX) * 0.007;
+  S.rotX += (e.clientY - S.lastY) * 0.003;
+  S.rotX = Math.max(0.05, Math.min(1.1, S.rotX));
+  S.lastX = e.clientX; S.lastY = e.clientY;
+  updateCamera();
+});
+window.addEventListener('mouseup', () => S.dragging = false);
+tc.addEventListener('wheel', e => {
+  S.zoom = Math.max(3, Math.min(14, S.zoom + e.deltaY * 0.01));
+  updateCamera(); e.preventDefault();
+}, { passive: false });
+
+// Touch support
+tc.addEventListener('touchstart', e => { S.dragging = true; S.lastX = e.touches[0].clientX; S.lastY = e.touches[0].clientY; });
+tc.addEventListener('touchmove', e => {
+  if (!S.dragging) return;
+  S.rotY += (e.touches[0].clientX - S.lastX) * 0.007;
+  S.rotX += (e.touches[0].clientY - S.lastY) * 0.003;
+  S.rotX = Math.max(0.05, Math.min(1.1, S.rotX));
+  S.lastX = e.touches[0].clientX; S.lastY = e.touches[0].clientY;
+  updateCamera(); e.preventDefault();
+}, { passive: false });
+tc.addEventListener('touchend', () => S.dragging = false);
+
+function rotLeft() { S.rotY -= 0.25; updateCamera(); }
+function rotRight() { S.rotY += 0.25; updateCamera(); }
+function zoomIn() { S.zoom = Math.max(3, S.zoom - 0.8); updateCamera(); }
+function zoomOut() { S.zoom = Math.min(14, S.zoom + 0.8); updateCamera(); }
+
+// 2D Canvas
+const c2 = document.getElementById('canvas2d');
+const ctx = c2.getContext('2d');
+
+function draw2D() {
+  const W = c2.offsetWidth, H = c2.offsetHeight;
+  c2.width = W * window.devicePixelRatio; c2.height = H * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.clearRect(0, 0, W, H);
+  if (S.view === 'floor') drawFloor(W, H);
+  else drawElevation(W, H, S.view === 'side');
+}
+
+function drawFloor(W, H) {
+  ctx.fillStyle = '#0D0E11'; ctx.fillRect(0,0,W,H);
+  const sc = Math.min(W, H) / 8.5;
+  const ox = (W - sc*6)/2, oy = (H - sc*5)/2;
+
+  // Grid
+  ctx.strokeStyle='#1A1D24'; ctx.lineWidth=0.5;
+  for (let i=0; i<=6; i+=0.5) { ctx.beginPath(); ctx.moveTo(ox+i*sc,oy); ctx.lineTo(ox+i*sc,oy+5*sc); ctx.stroke(); }
+  for (let i=0; i<=5; i+=0.5) { ctx.beginPath(); ctx.moveTo(ox,oy+i*sc); ctx.lineTo(ox+6*sc,oy+i*sc); ctx.stroke(); }
+
+  const rooms = [
+    {x:0,y:0,w:3,h:2.5,label:'Living Room',area:'42m²',c:'#1A1608',tc:'#C9A84C',bc:'#8B6914'},
+    {x:3,y:0,w:3,h:2.5,label:'Kitchen',area:'18m²',c:'#0D1A14',tc:'#4ECBA0',bc:'#2A5C38'},
+    {x:0,y:2.5,w:2.5,h:2.5,label:'Master\nBedroom',area:'28m²',c:'#120D1A',tc:'#9B7FD4',bc:'#4A3580'},
+    {x:2.5,y:2.5,w:1.5,h:1.5,label:'Bathroom',area:'12m²',c:'#1A120D',tc:'#E8A870',bc:'#7A4A20'},
+    {x:4,y:2.5,w:2,h:2.5,label:'Study\nRoom',area:'16m²',c:'#1A0D0D',tc:'#FF8080',bc:'#8B3030'},
+  ];
+
+  rooms.forEach(r => {
+    ctx.fillStyle = r.c;
+    ctx.fillRect(ox+r.x*sc, oy+r.y*sc, r.w*sc, r.h*sc);
+    ctx.strokeStyle = r.bc; ctx.lineWidth = 1.5;
+    ctx.strokeRect(ox+r.x*sc, oy+r.y*sc, r.w*sc, r.h*sc);
+
+    ctx.fillStyle = r.tc;
+    ctx.font = '500 12px DM Sans, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const lines = r.label.split('\n');
+    const cy = oy + r.y*sc + r.h*sc/2;
+    lines.forEach((l, i) => ctx.fillText(l, ox+r.x*sc+r.w*sc/2, cy + (i - (lines.length-1)/2)*16 - 6));
+
+    ctx.fillStyle = r.bc; ctx.font = '10px DM Sans';
+    ctx.fillText(r.area, ox+r.x*sc+r.w*sc/2, oy+r.y*sc+r.h*sc - 10);
+  });
+
+  // Compass
+  const cx = W-46, cy = H-46;
+  ctx.strokeStyle='#C9A84C'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,18,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle='#C9A84C'; ctx.font='600 11px DM Sans'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('N', cx, cy-7);
+  ctx.beginPath(); ctx.moveTo(cx,cy-15); ctx.lineTo(cx-4,cy+2); ctx.lineTo(cx+4,cy+2); ctx.closePath(); ctx.fill();
+
+  ctx.fillStyle='#555A6A'; ctx.font='11px DM Sans'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('Floor Plan  ·  Scale 1:50  ·  Ground Floor', 18, 16);
+}
+
+function drawElevation(W, H, isSide) {
+  ctx.fillStyle = '#0D0E11'; ctx.fillRect(0,0,W,H);
+
+  const bx=W*0.12, by=H*0.14, bw=W*0.76, bh=H*0.56;
+
+  // Sky
+  const sky = ctx.createLinearGradient(0,0,0,by+bh);
+  sky.addColorStop(0,'#080C16'); sky.addColorStop(1,'#111520');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,by+bh);
+
+  // Stars
+  ctx.fillStyle='#FFFFFF40';
+  for (let i=0; i<40; i++) {
+    const sx = Math.sin(i*137)*W, sy = Math.cos(i*97)*by*0.8;
+    if (sx>0 && sx<W && sy>0) { ctx.beginPath(); ctx.arc(sx, sy, 0.8, 0, Math.PI*2); ctx.fill(); }
+  }
+
+  // Ground
+  ctx.fillStyle='#1A1E14'; ctx.fillRect(0,by+bh,W,H-by-bh);
+
+  // Wall
+  ctx.fillStyle=S.wallColor;
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.lineWidth=1;
+  ctx.strokeRect(bx, by, bw, bh);
+
+  // Roof
+  ctx.beginPath(); ctx.moveTo(bx-22,by); ctx.lineTo(bx+bw/2,by-bh*0.38); ctx.lineTo(bx+bw+22,by); ctx.closePath();
+  ctx.fillStyle='#4A3828'; ctx.fill();
+  ctx.strokeStyle='#3A2818'; ctx.lineWidth=1; ctx.stroke();
+
+  // Chimney
+  ctx.fillStyle='#5A3020';
+  ctx.fillRect(bx+bw*0.67, by-bh*0.30, bw*0.07, bh*0.14);
+  ctx.fillRect(bx+bw*0.655, by-bh*0.305, bw*0.08, bh*0.02);
+
+  // Windows
+  const wins = isSide ? [[0.15,0.22,0.22,0.28]] : [[0.1,0.2,0.18,0.3],[0.62,0.2,0.18,0.3]];
+  wins.forEach(([wx,wy,ww,wh]) => {
+    ctx.fillStyle='rgba(68,136,180,0.4)';
+    ctx.fillRect(bx+bw*wx, by+bh*wy, bw*ww, bh*wh);
+    ctx.strokeStyle='#C9A84C70'; ctx.lineWidth=1.5;
+    ctx.strokeRect(bx+bw*wx, by+bh*wy, bw*ww, bh*wh);
+    ctx.lineWidth=0.7;
+    ctx.beginPath(); ctx.moveTo(bx+bw*(wx+ww/2), by+bh*wy); ctx.lineTo(bx+bw*(wx+ww/2), by+bh*(wy+wh)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx+bw*wx, by+bh*(wy+wh/2)); ctx.lineTo(bx+bw*(wx+ww), by+bh*(wy+wh/2)); ctx.stroke();
+  });
+
+  if (!isSide) {
+    // Door
+    ctx.fillStyle='#5C3D1E';
+    ctx.fillRect(bx+bw*0.44, by+bh*0.62, bw*0.12, bh*0.38);
+    ctx.strokeStyle='#C9A84C80'; ctx.lineWidth=1;
+    ctx.strokeRect(bx+bw*0.44, by+bh*0.62, bw*0.12, bh*0.38);
+    ctx.fillStyle='#C9A84C'; ctx.beginPath();
+    ctx.arc(bx+bw*0.542, by+bh*0.8, 3.5, 0, Math.PI*2); ctx.fill();
+
+    // Steps
+    ctx.fillStyle='#888070';
+    ctx.fillRect(bx+bw*0.41, by+bh, bw*0.18, 9);
+    ctx.fillRect(bx+bw*0.42, by+bh-9, bw*0.16, 9);
+
+    // Bushes
+    ctx.fillStyle='#2A4A18';
+    [[bx+bw*0.35, by+bh+2, 12],[bx+bw*0.62, by+bh+2, 14]].forEach(([x,y,r]) => {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    });
+  }
+
+  // Dimension lines
+  ctx.strokeStyle='#C9A84C40'; ctx.lineWidth=0.5; ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(bx-15,by); ctx.lineTo(bx-32,by); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bx-15,by+bh); ctx.lineTo(bx-32,by+bh); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bx-28,by); ctx.lineTo(bx-28,by+bh); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#C9A84C80'; ctx.font='11px DM Sans'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.save(); ctx.translate(bx-40, by+bh/2); ctx.rotate(-Math.PI/2); ctx.fillText('3.2m', 0, 0); ctx.restore();
+
+  ctx.fillStyle='#555A6A'; ctx.font='11px DM Sans'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(isSide ? 'Side Elevation View  ·  Scale 1:50' : 'Front Elevation View  ·  Scale 1:50', 18, 16);
+}
+
+function setView(v, btn) {
+  S.view = v;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const labels = {'3d':'3D Perspective View — Drag to rotate','floor':'Floor Plan — Top View','front':'Front Elevation View','side':'Side Elevation View'};
+  document.getElementById('toolbar-label').textContent = labels[v];
+  document.getElementById('ov-view').textContent = v==='3d'?'3D':v==='floor'?'Floor Plan':v==='front'?'Front':'Side';
+  if (v==='3d') { document.getElementById('threeCanvas').style.display='block'; c2.style.display='none'; }
+  else { document.getElementById('threeCanvas').style.display='none'; c2.style.display='block'; draw2D(); }
+}
+
+function selectRoom(btn, name, area, height, wins, doors) {
+  document.querySelectorAll('.room-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('rp-name').textContent = name;
+  document.getElementById('rp-area').textContent = area;
+  document.getElementById('rp-height').textContent = height;
+  document.getElementById('rp-windows').textContent = wins;
+  document.getElementById('rp-doors').textContent = doors;
+  document.getElementById('ov-room').textContent = name;
+}
+
+function setColor(el, color) {
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  S.wallColor = color; S.wallName = el.dataset.name;
+  document.getElementById('rp-color').textContent = S.wallName;
+  buildHouse();
+  if (S.view !== '3d') draw2D();
+}
+
+function setFloor(btn, type, name) {
+  document.querySelectorAll('.floor-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  S.floor = type; S.floorName = name;
+  document.getElementById('rp-floor').textContent = name;
+  document.getElementById('ov-floor').textContent = name;
+  buildHouse();
+}
+
+function resizeAll() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  if (S.view !== '3d') draw2D();
+}
+
+window.addEventListener('resize', resizeAll);
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (S.view === '3d') renderer.render(scene, camera);
+}
+
+// Init
+buildHouse();
+updateCamera();
+resizeAll();
+animate();
+
+// Hide drag hint after 4s
+setTimeout(() => {
+  const h = document.getElementById('drag-hint');
+  if (h) h.style.opacity = '0'; h.style.transition = 'opacity 1s';
+}, 4000);
+</script>
+</body>
+</html>
